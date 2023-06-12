@@ -10,7 +10,7 @@ $$
 \theta = \theta - \alpha\frac{\partial L}{\partial \theta}
 $$
 
-## 1.损失函数
+## 1. 损失函数
 ### 1.1 均方误差
 对于回归任务常用均方误差MSE作为损失函数
 $$
@@ -74,7 +74,7 @@ def cross_entropy_error(y, t, eps=1e-7):
     return -np.sum(np.log(y[np.arange(batch_size), t] + eps)) / batch_size
 ```
 
-## 2.数值微分
+## 2. 数值微分
 在损失函数求完后，如何计算损失函数相对于网络参数的梯度呢，本章中通过数值微分实现。
 ### 2.1 导数
 对于单变量函数可以通过以下方法计算导数
@@ -121,3 +121,135 @@ def numerical_gradient(f, x, h=1e-4):
     
     return grad
 ```
+
+### 2.3 梯度下降
+神经网络优化需要找到损失函数的最小值。函数在某一点的梯度是函数在该点上升最快的方向，沿着梯度的反方向即为函数在该点下降最快的方向。求得函数在某点的梯度后就可以沿着该梯度更新函数值，然后再求函数在更新后的梯度，如此迭代进行，即是梯度下降。python实现如下：
+```Python
+def gradient_descent(f, init_x, lr, step_num):
+    x = init_x
+    for i in range(step_num):
+        grad = numerical_gradient(f, x) # 计算f在x处的梯度
+        x -= lr * grad # 更新x
+    
+    return x
+```
+
+### 2.4 神经网络的梯度
+神经网络中模型的参数通常为矩阵$\boldsymbol{W_{m\times n}}$, 损失函数$L$关于$\boldsymbol{W_{m\times n}}$的也为矩阵并且形状也为$m \times n$,即
+$$
+\frac{\partial L}{\partial W} = \begin{bmatrix}
+    \frac{\partial L}{\partial W_{11}} & \frac{\partial L}{\partial W_{12}} & ··· & \frac{\partial L}{\partial W_{1n}} \\
+    ·\\
+    ·\\
+    ·\\
+    \frac{\partial L}{\partial W_{m1}} & \frac{\partial L}{\partial W_{m2}} & ··· & \frac{\partial L}{\partial W_{mn}}
+
+\end{bmatrix}
+$$
+
+由于神经网络的参数通常为2维, 计算梯度的实现修改为
+```Python
+def numerical_gradient_1d(f, x, h=1e-4):
+    grad = np.zeros_like(x)
+
+    for idx in range(x.size):
+        tmp = x[idx]
+        
+        # f(..., x + h, ...)
+        x[idx] = tmp + h
+        y1 = f(x)
+
+        # f(..., x - h, ...)
+        x[idx] = tmp - h
+        y2 = f(x)
+
+        grad[idx] = (y1 - y2) / (2 * h)
+
+        x[idx] = tmp # 还原当前变量值
+    
+    return grad
+
+def numerical_gradient(f, X):
+    if X.ndim == 1:
+        return numerical_gradient_1d(f, X)
+    else:
+        grad = np.zeros_like(X)
+        
+        for idx, x in enumerate(X):
+            grad[idx] = numerical_gradient_1d(f, x)
+        
+        return grad
+```
+
+## 3. 基于数值微分的神经网络实现
+
+本节实现一个2层神经网络，并通过数值微分更新参数，实现手写数字识别
+
+### 3.1 神经网络实现
+2层神经网络Python实现如下
+
+```Python
+class TwoLayerNet:
+
+    def __init__(self, input_size, hidden_size, output_size, weight_init_std=0.01):
+        # 初始化权重
+        self.params = {}
+        self.params['W1'] = weight_init_std * np.random.randn(input_size, hidden_size)
+        self.params['b1'] = np.zeros(hidden_size)
+        self.params['W2'] = weight_init_std * np.random.randn(hidden_size, output_size)
+        self.params['b2'] = np.zeros(output_size)
+
+    def predict(self, x):
+        W1, W2 = self.params['W1'], self.params['W2']
+        b1, b2 = self.params['b1'], self.params['b2']
+    
+        a1 = np.dot(x, W1) + b1
+        z1 = sigmoid(a1)
+        a2 = np.dot(z1, W2) + b2
+        y = softmax(a2)
+        
+        return y
+        
+    # x:输入数据, t:监督数据
+    def loss(self, x, t):
+        y = self.predict(x)
+        
+        return cross_entropy_error(y, t)
+    
+    def accuracy(self, x, t):
+        y = self.predict(x)
+        y = np.argmax(y, axis=1)
+        t = np.argmax(t, axis=1)
+        
+        accuracy = np.sum(y == t) / float(x.shape[0])
+        return accuracy
+        
+    # x:输入数据, t:监督数据
+    def numerical_gradient(self, x, t):
+        loss_W = lambda W: self.loss(x, t)
+        
+        grads = {}
+        grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
+        grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
+        grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
+        grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
+        
+        return grads
+```
+
+### 3.2 生成mini-batch数据
+
+Python实现如下
+```Python
+def generate_batch(X, t, batch_size):
+    total = len(X)
+    indexes = list(range(total))
+    np.random.shuffle(indexes)
+    for i in range(0, total, batch_size):
+        index = indexes[i : i + batch_size]
+        x_batch = X[index]
+        t_batch = t[index]
+        yield x_batch, t_batch
+```
+书中本章没有在一个epoch中完整遍历整个训练集，每次训练都随机取batch_size个样本，共迭代10000次。数值微分计算特别慢，在我的电脑上测试batch_size=100时，跑一个batch需要2分多钟，因此跑10000次消耗太大。完整代码在[DeepLearningFromScratch
+](https://github.com/wflying000/DeepLearningFromScratch)
