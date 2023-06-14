@@ -88,7 +88,12 @@ def _change_one_hot_label(X):
     return T
     
 
-def load_mnist(filepath, normalize=True, flatten=True, one_hot_label=False):
+def load_mnist(
+        filepath="../data/mnist.pkl", 
+        normalize=True, 
+        flatten=True, 
+        one_hot_label=False
+):
     """读入MNIST数据集
     
     Parameters

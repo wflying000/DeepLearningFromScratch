@@ -1,3 +1,4 @@
+#! https://zhuanlan.zhihu.com/p/636605162
 # 《深度学习入门 —— 基于Python的理论与实现》chapter4 神经网络的学习
 
 本章主要内容
